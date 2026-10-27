@@ -1,0 +1,471 @@
+# A fictional example. "Riverbend Physical Therapy" is invented: a multi-clinic outpatient provider whose
+# operations team tracks referrals, visits, retention and payer mix in a hand-built spreadsheet.
+# Copy this file into the client project folder and edit it there. Never put client data in the skill repository.
+# Schema: references/spec-format.md
+project:
+  id: RPT-12
+  title: Warehouse design for the clinic operations scorecard
+  file_prefix: rpt-12
+  version: '1'
+  date: 1 March 2027
+  warehouse: Snowflake
+  sources:
+  - tag: Scorecard
+    description: Clinic operations scorecard spreadsheet (February 2027)
+  - tag: Memo
+    description: Memo on referral leakage (January 2027)
+tables:
+- name: fct_visits
+  kind: fact
+  tier: core
+  fact_type: Accumulating snapshot
+  grain: One row per scheduled visit in the EHR, all outcomes.
+  pk: visit_id
+  status: main
+  status_label: On main, rename
+  built_from: visits (rename), stg_ehr__appointments
+  purpose: The visit of record. Visit volume, no-show rate, therapist utilisation and visits per episode read this
+    table.
+  columns:
+  - name: visit_id
+    type: VARCHAR
+    role: PK
+    description: The EHR's id for the visit. Primary key.
+    lineage: visits.visit_id
+    status: Exists
+  - name: patient_id
+    type: VARCHAR
+    role: FK
+    fk: dim_patients
+    description: The patient. Joins to dim_patients.
+    lineage: visits.patient_id
+    status: Exists
+  - name: clinic_id
+    type: VARCHAR
+    role: FK
+    fk: dim_clinics
+    description: The clinic the visit was booked at. Joins to dim_clinics.
+    lineage: visits.location_id
+    status: Rename
+  - name: payer_id
+    type: VARCHAR
+    role: FK
+    fk: dim_payers
+    description: The payer on the patient's active coverage. Null for self-pay.
+    lineage: coverage feed
+    status: Gap G2
+  - name: visit_on
+    type: DATE
+    role: FK
+    fk: dim_date
+    description: Calendar date of the visit. Joins to dim_date.
+    lineage: visits.start_at
+    status: New
+  - name: booked_at
+    type: TIMESTAMP_NTZ
+    role: Milestone
+    description: When the visit was booked.
+    lineage: visits.created_at
+    status: Rename
+  - name: visit_at
+    type: TIMESTAMP_NTZ
+    role: Milestone
+    description: Scheduled start of the visit.
+    lineage: visits.start_at
+    status: Rename
+  - name: visit_number_in_episode
+    type: NUMBER
+    role: Measure
+    description: The order of this visit within the patient's episode of care. Null when the visit did not occur.
+    lineage: window over occurred visits
+    status: New
+  - name: did_occur
+    type: BOOLEAN
+    role: Flag
+    description: True when the visit took place.
+    lineage: visits.status
+    status: Exists
+  - name: was_no_show
+    type: BOOLEAN
+    role: Flag
+    description: True when the patient did not attend and did not cancel.
+    lineage: visits.status
+    status: Exists
+  - name: booking_lead_days
+    type: NUMBER
+    role: Measure
+    description: Whole days from booking to the visit.
+    lineage: booked_at to visit_at
+    status: New
+- name: fct_patient_journeys
+  kind: fact
+  tier: core
+  fact_type: Accumulating snapshot
+  grain: One row per referral, from receipt to discharge.
+  pk: referral_id
+  status: new
+  built_from: stg_fax_inbox__referrals, fct_visits
+  in_flight: '#14 (referral intake staging)'
+  purpose: Carries each referral through intake, first visit and discharge, so conversion and time-to-first-visit
+    questions are one filter.
+  columns:
+  - name: referral_id
+    type: VARCHAR
+    role: PK
+    description: Primary key.
+    lineage: stg_fax_inbox__referrals
+    status: 'PR #14'
+  - name: patient_id
+    type: VARCHAR
+    role: FK
+    fk: dim_patients
+    description: The patient. Null until the referral is matched to a patient record.
+    lineage: patient match
+    status: New
+  - name: clinic_id
+    type: VARCHAR
+    role: FK
+    fk: dim_clinics
+    description: The clinic the referral was routed to. Joins to dim_clinics.
+    lineage: routing rules
+    status: New
+  - name: received_on
+    type: DATE
+    role: FK
+    fk: dim_date
+    description: Date the referral arrived. The cohort for conversion.
+    lineage: stg_fax_inbox__referrals
+    status: 'PR #14'
+  - name: first_contact_at
+    type: TIMESTAMP_NTZ
+    role: Milestone
+    description: First outbound call to the patient.
+    lineage: phone system
+    status: Gap G1
+  - name: first_visit_at
+    type: TIMESTAMP_NTZ
+    role: Milestone
+    description: Start of the first occurred visit.
+    lineage: fct_visits
+    status: New
+  - name: discharged_at
+    type: TIMESTAMP_NTZ
+    role: Milestone
+    description: When the episode was closed.
+    lineage: EHR episodes
+    status: New
+  - name: days_referral_to_first_visit
+    type: NUMBER
+    role: Measure
+    description: Whole days from receipt to the first visit.
+    lineage: received_on to first_visit_at
+    status: New
+  - name: occurred_visit_count
+    type: NUMBER
+    role: Measure
+    description: Visits the patient attended in this episode.
+    lineage: fct_visits
+    status: New
+- name: fct_patient_monthly_status
+  kind: fact
+  tier: core
+  fact_type: Periodic snapshot
+  grain: One row per patient per calendar month while an episode is open.
+  pk: patient_id, month_start_on
+  status: new
+  built_from: fct_visits, fct_patient_journeys
+  purpose: Active patients, monthly churn and visits per active patient.
+  columns:
+  - name: patient_id
+    type: VARCHAR
+    role: PK part
+    fk: dim_patients
+    description: The patient. Joins to dim_patients.
+    lineage: fct_visits
+    status: New
+  - name: month_start_on
+    type: DATE
+    role: PK part
+    fk: dim_date
+    description: First day of the month. Joins to dim_date.
+    lineage: date spine
+    status: New
+  - name: is_active
+    type: BOOLEAN
+    role: Flag
+    description: True when the patient had a visit in the month or has one booked in the next 14 days.
+    lineage: decision D1
+    status: New
+  - name: visits_in_month
+    type: NUMBER
+    role: Measure
+    description: Occurred visits in the month.
+    lineage: fct_visits
+    status: New
+- name: fct_claims
+  kind: fact
+  tier: supporting
+  fact_type: Transaction
+  grain: One row per claim line submitted to a payer.
+  pk: claim_line_id
+  status: main
+  status_label: On main, rename
+  built_from: billing_claim_lines (rename)
+  purpose: Revenue per visit and payer mix.
+  columns:
+  - name: claim_line_id
+    type: VARCHAR
+    role: PK
+    description: Primary key.
+    lineage: billing_claim_lines.id
+    status: Rename
+  - name: visit_id
+    type: VARCHAR
+    role: FK
+    fk: fct_visits
+    description: The visit billed. Joins to fct_visits.
+    lineage: billing_claim_lines.encounter_id
+    status: Rename
+  - name: payer_id
+    type: VARCHAR
+    role: FK
+    fk: dim_payers
+    description: The payer billed. Joins to dim_payers.
+    lineage: billing_claim_lines.payer
+    status: Exists
+  - name: service_on
+    type: DATE
+    role: FK
+    fk: dim_date
+    description: Date of service. Joins to dim_date.
+    lineage: billing_claim_lines.service_date
+    status: Rename
+  - name: paid_amount_usd
+    type: NUMBER
+    role: Measure
+    description: Amount the payer paid, in US dollars. Null until adjudicated.
+    lineage: remittance feed
+    status: Exists
+- name: dim_date
+  kind: dimension
+  grain: One row per calendar day.
+  pk: date_day
+  built_from: date spine
+  columns:
+  - name: date_day
+    type: DATE
+    role: PK
+    description: The calendar day.
+    lineage: date spine
+    status: New
+  - name: week_start_on
+    type: DATE
+    role: Attribute
+    description: The Monday that starts the week.
+    lineage: date spine
+    status: New
+  - name: month_start_on
+    type: DATE
+    role: Attribute
+    description: First day of the month.
+    lineage: date spine
+    status: New
+- name: dim_patients
+  kind: dimension
+  label: Patient
+  grain: One row per patient.
+  pk: patient_id
+  status: main
+  built_from: patients (rename)
+  columns:
+  - name: patient_id
+    type: VARCHAR
+    role: PK
+    description: Primary key.
+    lineage: patients.id
+    status: Exists
+  - name: birth_year
+    type: NUMBER
+    role: Attribute
+    description: Year of birth. Store the year, not the age, because age changes.
+    lineage: patients.birth_date
+    status: New
+  - name: home_state
+    type: VARCHAR
+    role: Attribute
+    description: Two-letter state of the home address.
+    lineage: patients.state
+    status: Exists
+- name: dim_clinics
+  kind: dimension
+  label: Clinic
+  grain: One row per clinic.
+  pk: clinic_id
+  status: main
+  built_from: locations (rename)
+  columns:
+  - name: clinic_id
+    type: VARCHAR
+    role: PK
+    description: Primary key.
+    lineage: locations.id
+    status: Rename
+  - name: clinic_name
+    type: VARCHAR
+    role: Attribute
+    description: The clinic's name.
+    lineage: locations.name
+    status: Exists
+  - name: region
+    type: VARCHAR
+    role: Attribute
+    description: The operating region the clinic reports into.
+    lineage: region seed
+    status: New
+- name: dim_payers
+  kind: dimension
+  label: Payer
+  grain: One row per payer.
+  pk: payer_id
+  built_from: payer seed
+  columns:
+  - name: payer_id
+    type: VARCHAR
+    role: PK
+    description: Primary key.
+    lineage: payer seed
+    status: New
+  - name: payer_name
+    type: VARCHAR
+    role: Attribute
+    description: The payer's name.
+    lineage: payer seed
+    status: New
+  - name: payer_group
+    type: VARCHAR
+    role: Attribute
+    description: commercial, medicare, medicaid, workers_comp or self_pay.
+    lineage: payer seed
+    status: New
+questions:
+- id: Q01
+  theme: Volume
+  question: How many visits occurred each week by clinic?
+  source: 'Scorecard: Weekly volume'
+  primary_table: fct_visits
+  slice_by: week, clinic
+  how_to_answer: Count did_occur by week_start_on and clinic.
+  readiness: Ready
+- id: Q02
+  theme: Volume
+  question: What is the no-show rate by clinic and booking lead time?
+  source: 'Scorecard: No-shows'
+  primary_table: fct_visits
+  slice_by: clinic, lead-time band
+  how_to_answer: Share of was_no_show among visits with a final status.
+  readiness: Ready
+- id: Q03
+  theme: Referrals
+  question: What share of referrals reach a first visit within 14 days?
+  source: 'Memo: Referral leakage'
+  primary_table: fct_patient_journeys
+  slice_by: received week, clinic
+  how_to_answer: Share with days_referral_to_first_visit at most 14, among referrals observed for 14 days.
+  readiness: Partial
+  waits_on:
+  - G1
+- id: Q04
+  theme: Referrals
+  question: How long does it take to first contact a referred patient?
+  source: 'Memo: Referral leakage'
+  primary_table: fct_patient_journeys
+  how_to_answer: Median hours from receipt to first_contact_at.
+  readiness: Blocked
+  waits_on:
+  - G1
+- id: Q05
+  theme: Retention
+  question: How many visits does a patient complete per episode?
+  source: 'Scorecard: Episodes'
+  primary_table: fct_patient_journeys
+  how_to_answer: Average occurred_visit_count for discharged episodes.
+  readiness: Ready
+- id: Q06
+  theme: Retention
+  question: How many active patients do we have each month?
+  source: 'Scorecard: Active patients'
+  primary_table: fct_patient_monthly_status
+  how_to_answer: Sum is_active by month.
+  readiness: Partial
+  waits_on:
+  - D1
+- id: Q07
+  theme: Revenue
+  question: What is revenue per visit by payer group?
+  source: 'Scorecard: Payer mix'
+  primary_table: fct_claims
+  also_uses:
+  - fct_visits
+  how_to_answer: Sum paid_amount_usd over occurred visits, by payer_group.
+  readiness: Partial
+  waits_on:
+  - G2
+current_models:
+- model: visits
+  grain: One row per visit
+  location: main / core
+  action: Rename and extend
+  target: fct_visits
+  reason: Already the visit grain; add date keys, lead time and episode order.
+- model: billing_claim_lines
+  grain: One row per claim line
+  location: main / finance
+  action: Rename
+  target: fct_claims
+  reason: Name it as a fact.
+- model: weekly_clinic_rollup
+  grain: One row per clinic per week
+  location: main / reporting
+  action: Replace with semantic view
+  target: fct_visits
+  reason: A pre-aggregate that restates fct_visits.
+  bi_usage: 'Yes'
+- model: patients
+  grain: One row per patient
+  location: main / core
+  action: Rename
+  target: dim_patients
+  reason: Already the patient dimension.
+- model: locations
+  grain: One row per clinic
+  location: main / core
+  action: Rename
+  target: dim_clinics
+  reason: Already the clinic dimension.
+in_flight:
+- ref: '#14'
+  title: 'feat: stage referral intake from the fax inbox'
+  state: Open
+  adds: Staging model for referrals.
+  fit: Source for fct_patient_journeys.
+  next_step: Merge
+  url: https://example.com/pull/14
+gaps:
+- id: G1
+  gap: No record of outbound calls to referred patients.
+  blocks: Q03, Q04
+  owner: Intake team
+  status: Open
+  evidence: The phone system is not loaded into the warehouse.
+- id: G2
+  gap: Coverage is not linked to visits.
+  blocks: Q07
+  owner: Data team
+  status: Open
+  evidence: The coverage feed has no visit or date key.
+decisions:
+- id: D1
+  decision: Active patient rule
+  why: Drives the active patient count.
+  options: Visit in the month; or a visit in the month or one booked in the next 14 days
+  recommendation: A visit in the month or one booked in the next 14 days.
