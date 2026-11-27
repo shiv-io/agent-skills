@@ -41,7 +41,7 @@ else already holds the same rows.
 Follow `modelling-rules.md`. In order:
 
 1. List the business processes the questions touch.
-2. Choose the core facts. Count questions per candidate. Adjust until three to five facts carry about 80-90%.
+2. Choose the core facts. Count questions per candidate. Adjust until a limited set of facts carries about 80-90% — the right number differs for every business.
 3. Add supporting facts for the remaining questions, and for inputs the core facts roll up.
 4. Define the conformed dimensions. Put definitional rules (outcome groups, billable types, traffic
    classification) in small seed-backed dimensions so each rule lives once.
