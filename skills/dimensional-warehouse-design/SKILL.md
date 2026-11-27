@@ -10,9 +10,8 @@ metadata:
 # Dimensional warehouse design
 
 Turn a pile of source documents ("this is how we report today") into a warehouse design that a data
-team can build and a business owner can review. The design centres on **three to five core fact tables
-that answer 80-90% of the business questions**, with supporting facts and conformed dimensions for the
-rest.
+team can build and a business owner can review. The design centres on **a limited set of core fact tables that answer 80-90% of the business questions**, with supporting facts and conformed dimensions for the
+rest. How many that is differs for every business — the point is the set stays limited, not unlimited.
 
 The inputs change with every client. The outputs stay the same:
 
@@ -75,7 +74,7 @@ Follow these phases in order. `references/workflow.md` has the detail for each o
 
 - **Name things for what they are.** A table name says what one row is. A column name says what one value
   is, with its unit. If a current name disagrees with its content, propose the rename and say why.
-- **Core facts carry the weight.** Pick three to five. Count the questions each one is primary for, and
+- **Core facts carry the weight.** Pick a limited set — the right number differs for every business, so don't aim for a particular count. Count the questions each one is primary for, and
   report the share. If it is under about 80%, the core set is wrong or the questions are too scattered.
 - **One definition, one place.** A rule such as "billable", "new customer" or "active" lives in one
   dimension or one column, never restated downstream. Ambiguous rules become decisions in the workbook,
