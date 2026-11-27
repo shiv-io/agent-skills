@@ -1,6 +1,8 @@
 # agent-skills
 
-Private agent skills in the portable [Agent Skills](https://www.skills.sh/docs) format. Each skill is a
+[![skills.sh](https://skills.sh/b/shiv-io/agent-skills)](https://skills.sh/shiv-io/agent-skills)
+
+Open-source agent skills in the portable [Agent Skills](https://www.skills.sh/docs) format. Each skill is a
 folder under `skills/` with a `SKILL.md`, and optional `scripts/`, `references/` and `assets/`.
 
 | Skill | What it does |
@@ -8,8 +10,6 @@ folder under `skills/` with a `SKILL.md`, and optional `scripts/`, `references/`
 | [`dimensional-warehouse-design`](skills/dimensional-warehouse-design/SKILL.md) | Turns client source documents (KPI spreadsheets, metric memos, tickets, business questions) and the current warehouse into a Kimball design: a hyperlinked Excel workbook with one tab per table, a business-question map, a bus matrix and a keep/rename/retire list, plus Excalidraw diagrams. |
 
 ## Install
-
-The repository is private. The `skills` CLI uses your existing Git or GitHub CLI credentials.
 
 ```bash
 # every skill, globally, for Claude Code
