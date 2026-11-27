@@ -1,7 +1,7 @@
 ---
 name: dimensional-warehouse-design
 description: Design a Kimball-style data warehouse (fact and dimension tables) from a client's source documents, such as KPI spreadsheets, metric memos, tickets and lists of business questions, and from what already exists in their warehouse. Produces a hyperlinked Excel design workbook (summary of every table, one tab per table with columns, types and descriptions, business questions mapped to tables, bus matrix, keep/rename/merge/retire list for current models, in-flight work, gaps, decisions) and Excalidraw diagrams with PNG copies. Use when asked to scope or design a warehouse, a fact/dimension model, a bus matrix or a semantic layer for a set of metrics, or to replace manual KPI spreadsheets with modelled tables.
-license: Proprietary. Private use only.
+license: MIT
 metadata:
   author: shiv-io
   version: "1.0.0"
