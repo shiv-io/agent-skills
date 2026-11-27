@@ -13,8 +13,7 @@ shape that the questions need:
 | The population over time | Periodic snapshot | One entity per month (or week) | Active counts, cumulative counts, churn, month-over-month retention, revenue per period |
 | Supply or capacity | Periodic snapshot | One resource per day | Availability, wait to first slot, utilisation |
 
-Then count. For each candidate, list the questions it is the primary table for. The core set is right
-when three to five facts carry about 80-90% of the questions. If one candidate carries almost nothing,
+Then count. For each candidate, list the questions it is the primary table for. The core set is right when a limited set of facts carries about 80-90% of the questions — how many that is differs for every business, so don't aim for a particular count. If one candidate carries almost nothing,
 demote it to supporting. If many questions need a join of two facts to answer, a core fact is missing a
 column (usually a milestone or a count rolled up from another fact).
 
